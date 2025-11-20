@@ -1,12 +1,17 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 
 app = FastAPI()
 
-# -----------------------------
-# TU CÓDIGO ADAPTADO A API
-# -----------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def cifrar_cesar(texto, desplazamiento):
     resultado = ""
@@ -21,7 +26,6 @@ def cifrar_cesar(texto, desplazamiento):
 def descifrar_cesar(texto, desplazamiento):
     return cifrar_cesar(texto, -desplazamiento)
 
-# Archivo de chat
 CHAT_FILE = "chat_cifrado.txt"
 
 class MensajeIn(BaseModel):
@@ -33,9 +37,7 @@ class MensajeOut(BaseModel):
     usuario: str
     mensaje_descifrado: str
 
-# ---------------------------------
-# ENDPOINT: enviar mensaje cifrado
-# ---------------------------------
+
 @app.post("/enviar")
 def enviar_msg(data: MensajeIn):
     mensaje_cifrado = cifrar_cesar(data.mensaje, data.desplazamiento)
@@ -45,9 +47,7 @@ def enviar_msg(data: MensajeIn):
 
     return {"status": "ok", "mensaje_cifrado": mensaje_cifrado}
 
-# ---------------------------------
-# ENDPOINT: obtener chat descifrado
-# ---------------------------------
+
 @app.get("/historial")
 def historial(desplazamiento: int):
     if not os.path.exists(CHAT_FILE):
@@ -64,3 +64,4 @@ def historial(desplazamiento: int):
             )
 
     return mensajes
+
