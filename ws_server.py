@@ -1,3 +1,7 @@
+@app.get("/")
+def home():
+    return {"status": "ok", "message": "WebSocket server running!"}
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import json
@@ -48,4 +52,5 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         clients.remove(websocket)
+
 
