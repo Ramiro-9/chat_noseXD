@@ -2,47 +2,68 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Chat en tiempo real cifrado</title>
+    <title>Chat cifrado con César</title>
+    <style>
+        body { background:#1e293b; color:white; font-family:Arial; }
+        #chat { width:60%; height:300px; background:#0f172a; margin:auto; overflow-y:auto; padding:10px; border-radius:10px; }
+        input { padding:10px; margin:5px; border-radius:5px; border:none; }
+        button { padding:10px; border:none; background:#0284c7; color:white; border-radius:5px; cursor:pointer; }
+    </style>
 </head>
 <body>
-    <h1>Chat en tiempo real cifrado</h1>
 
+<h1 style="text-align:center;">Chat cifrado con César</h1>
+
+<div style="text-align:center;">
     <input id="name" placeholder="Tu nombre">
     <input id="shift" placeholder="Desplazamiento">
-    <button onclick="connect()">Entrar al chat</button>
-    <br><br>
+    <button onclick="joinChat()">Entrar al chat</button>
+</div>
 
-    <textarea id="chat" cols="50" rows="15" readonly></textarea><br>
+<div id="chat"></div>
 
-    <input id="msg" placeholder="Escribe un mensaje...">
-    <button onclick="sendMsg()">Enviar</button>
+<div style="text-align:center; margin-top:10px;">
+    <input id="msg" placeholder="Escribe un mensaje..." style="width:60%;">
+    <button onclick="sendMessage()">Enviar</button>
+</div>
 
 <script>
 let ws;
+let username = "";
+let shift = 0;
 
-function connect() {
-    const name = document.getElementById("name").value;
-    const shift = document.getElementById("shift").value;
+function joinChat(){
+    username = document.getElementById("name").value;
+    shift = parseInt(document.getElementById("shift").value);
 
-    ws = new WebSocket("wss://chat-nosexd-2.onrender.com");
+    if(!username || isNaN(shift)){
+        alert("Completa nombre y desplazamiento");
+        return;
+    }
+
+    // CONÉCTATE AL WEBSOCKET DE RENDER
+    ws = new WebSocket("wss://TU-PROYECTO.onrender.com/ws/chat");
 
     ws.onmessage = (event) => {
         const chat = document.getElementById("chat");
-        chat.value += event.data + "\n";
+        chat.innerHTML += event.data + "<br>";
+        chat.scrollTop = chat.scrollHeight;
     };
+
+    ws.onopen = () => alert("Conectado al chat");
 }
 
-function sendMsg() {
-    const name = document.getElementById("name").value;
-    const shift = document.getElementById("shift").value;
-    const message = document.getElementById("msg").value;
+function sendMessage(){
+    const text = document.getElementById("msg").value;
+    if(!text) return;
 
-    ws.send(JSON.stringify({
-        name: name,
-        shift: shift,
-        message: message
-    }));
+    const data = {
+        name: username,
+        message: text,
+        shift: shift
+    };
 
+    ws.send(JSON.stringify(data));
     document.getElementById("msg").value = "";
 }
 </script>
