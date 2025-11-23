@@ -4,7 +4,7 @@ import json
 
 app = FastAPI()
 
-# Permitir acceso desde cualquier origen (para móviles, PC, etc.)
+# Permitir acceso desde cualquier origen
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,10 +13,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Lista de clientes conectados
 clients = []
 
-# Cifrado César
 def caesar_encrypt(text, shift):
     result = ""
     for char in text:
@@ -45,9 +43,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
             full_msg = f"{name}: {encrypted}"
 
-            # Enviar a todos los conectados
             for client in clients:
                 await client.send_text(full_msg)
 
     except WebSocketDisconnect:
         clients.remove(websocket)
+
