@@ -42,7 +42,7 @@ function joinChat(){
     }
 
     // CONÉCTATE AL WEBSOCKET DE RENDER
-    ws = new WebSocket("wss://chat-nosexd-2.onrender.com");
+    ws = new WebSocket("wss://chat-nosexd-2.onrender.com/ws/chat");
 
     ws.onmessage = (event) => {
         const chat = document.getElementById("chat");
@@ -70,4 +70,5 @@ function sendMessage(){
 
 </body>
 </html>
+
 
