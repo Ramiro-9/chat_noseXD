@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Chat en tiempo real cifrado</title>
+</head>
+<body>
+    <h1>Chat en tiempo real cifrado</h1>
+
+    <input id="name" placeholder="Tu nombre">
+    <input id="shift" placeholder="Desplazamiento">
+    <button onclick="connect()">Entrar al chat</button>
+    <br><br>
+
+    <textarea id="chat" cols="50" rows="15" readonly></textarea><br>
+
+    <input id="msg" placeholder="Escribe un mensaje...">
+    <button onclick="sendMsg()">Enviar</button>
+
+<script>
+let ws;
+
+function connect() {
+    const name = document.getElementById("name").value;
+    const shift = document.getElementById("shift").value;
+
+    ws = new WebSocket("wss://chat-nosexd-2.onrender.com");
+
+    ws.onmessage = (event) => {
+        const chat = document.getElementById("chat");
+        chat.value += event.data + "\n";
+    };
+}
+
+function sendMsg() {
+    const name = document.getElementById("name").value;
+    const shift = document.getElementById("shift").value;
+    const message = document.getElementById("msg").value;
+
+    ws.send(JSON.stringify({
+        name: name,
+        shift: shift,
+        message: message
+    }));
+
+    document.getElementById("msg").value = "";
+}
+</script>
+
+</body>
+</html>
