@@ -6,7 +6,9 @@ import os
 
 app = FastAPI()
 
-# CORS
+# =====================================
+#   CORS
+# =====================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,19 +17,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-clients = []
+# =====================================
+#   HEALTHCHECK (para Render)
+# =====================================
+@app.get("/")
+def home():
+    return {"status": "ok", "message": "WebSocket server running!"}
 
-# -------------------------------
-#  SUPABASE CLIENT
-# -------------------------------
+# =====================================
+#   SUPABASE
+# =====================================
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# -------------------------------
-#  Cifrado César
-# -------------------------------
+# clients: { websocket: {"name": str, "shift": int, "room_id": str, "room_name": str, "user_id": str} }
+clients = {}
+
+# =====================================
+#   CIFRADO CÉSAR
+# =====================================
 def caesar_encrypt(text, shift):
     result = ""
     for char in text:
@@ -38,48 +48,143 @@ def caesar_encrypt(text, shift):
             result += char
     return result
 
+# =====================================
+#   HELPERS SUPABASE
+# =====================================
+def get_or_create_user(name: str) -> str:
+    """Busca un usuario por name, si no existe lo crea. Devuelve user_id (uuid)."""
+    res = supabase.table("users").select("id").eq("name", name).execute()
+    if res.data:
+        return res.data[0]["id"]
 
-# -------------------------------
-#  WebSocket principal
-# -------------------------------
+    # crear
+    ins = supabase.table("users").insert({
+        "name": name,
+        "avatar": None
+    }).execute()
+    return ins.data[0]["id"]
+
+def get_or_create_room(room_name: str) -> str:
+    """Busca una sala por name, si no existe la crea. Devuelve room_id (uuid)."""
+    res = supabase.table("rooms").select("id").eq("name", room_name).execute()
+    if res.data:
+        return res.data[0]["id"]
+
+    ins = supabase.table("rooms").insert({
+        "name": room_name
+    }).execute()
+    return ins.data[0]["id"]
+
+async def broadcast_to_room(room_id: str, message: dict):
+    """Envía un JSON a todos los clientes conectados en una sala."""
+    to_remove = []
+    for ws, info in clients.items():
+        if info["room_id"] == room_id:
+            try:
+                await ws.send_text(json.dumps(message))
+            except Exception:
+                to_remove.append(ws)
+    for ws in to_remove:
+        clients.pop(ws, None)
+
+async def send_users_list(room_id: str):
+    """Manda la lista de usuarios conectados en esa sala."""
+    users = [info["name"] for ws, info in clients.items() if info["room_id"] == room_id]
+    await broadcast_to_room(room_id, {
+        "type": "users",
+        "users": users
+    })
+
+# =====================================
+#   WEBSOCKET
+# =====================================
 @app.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    clients.append(websocket)
+    # Mientras no se haga join, no sabemos su info
+    clients[websocket] = {
+        "name": "Anon",
+        "shift": 3,
+        "room_id": None,
+        "room_name": None,
+        "user_id": None,
+    }
 
     try:
         while True:
+            raw = await websocket.receive_text()
+            data = json.loads(raw)
+            msg_type = data.get("type")
 
             # -----------------------------
-            # Recibir JSON desde el cliente
+            # JOIN A LA SALA
             # -----------------------------
-            data = await websocket.receive_text()
-            data = json.loads(data)
+            if msg_type == "join":
+                name = data.get("name", "Anon")
+                shift = int(data.get("shift", 3))
+                room_name = data.get("room", "general") or "general"
 
-            # Datos recibidos
-            user_id = data.get("user_id")
-            room_id = data.get("room_id")
-            name = data.get("name")
-            message = data.get("message")
-            shift = int(data.get("shift", 3))
+                # usuario real en Supabase
+                user_id = get_or_create_user(name)
+                # sala real en Supabase
+                room_id = get_or_create_room(room_name)
 
-            # Cifrar
-            encrypted = caesar_encrypt(message, shift)
+                clients[websocket] = {
+                    "name": name,
+                    "shift": shift,
+                    "room_id": room_id,
+                    "room_name": room_name,
+                    "user_id": user_id,
+                }
 
-            # Guardar en SUPABASE
-            supabase.table("messages").insert({
-                "user_id": user_id,
-                "room_id": room_id,
-                "text": encrypted,
-                "shift": shift
-            }).execute()
+                # mensaje del sistema
+                await broadcast_to_room(room_id, {
+                    "type": "system",
+                    "text": f"{name} se unió a la sala {room_name}"
+                })
 
-            # Mensaje formateado
-            full_message = f"{name}: {encrypted}"
+                # lista de usuarios en la sala
+                await send_users_list(room_id)
 
-            # Enviar a todos los conectados
-            for client in clients:
-                await client.send_text(full_message)
+            # -----------------------------
+            # MENSAJE NORMAL
+            # -----------------------------
+            elif msg_type == "message":
+                info = clients.get(websocket)
+                if not info or not info["room_id"] or not info["user_id"]:
+                    continue
+
+                plain_text = data.get("message", "")
+                name = info["name"]
+                shift = info["shift"]
+                room_id = info["room_id"]
+
+                encrypted = caesar_encrypt(plain_text, shift)
+
+                # Guardar en Supabase
+                supabase.table("messages").insert({
+                    "room_id": room_id,
+                    "user_id": info["user_id"],
+                    "text": encrypted,
+                    "shift": shift
+                }).execute()
+
+                # Enviar a todos en la sala
+                await broadcast_to_room(room_id, {
+                    "type": "message",
+                    "from": name,
+                    "text": encrypted
+                })
 
     except WebSocketDisconnect:
-        clients.remove(websocket)
+        info = clients.pop(websocket, None)
+        if info and info["room_id"]:
+            room_id = info["room_id"]
+            name = info["name"]
+
+            # avisar que se fue
+            await broadcast_to_room(room_id, {
+                "type": "system",
+                "text": f"{name} salió del chat"
+            })
+            await send_users_list(room_id)
