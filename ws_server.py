@@ -49,27 +49,35 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         while True:
+
+            # -----------------------------
+            # Recibir JSON desde el cliente
+            # -----------------------------
             data = await websocket.receive_text()
             data = json.loads(data)
 
-            name = data["name"]
-            message = data["message"]
-            shift = int(data["shift"])
+            # Datos recibidos
+            user_id = data.get("user_id")
+            room_id = data.get("room_id")
+            name = data.get("name")
+            message = data.get("message")
+            shift = int(data.get("shift", 3))
 
+            # Cifrar
             encrypted = caesar_encrypt(message, shift)
-            full_message = f"{name}: {encrypted}"
 
-            # ----------------------------------------------------
-            # GUARDAR MENSAJE EN SUPABASE (sin sala por ahora)
-            # ----------------------------------------------------
+            # Guardar en SUPABASE
             supabase.table("messages").insert({
-                "user_id": "00000000-0000-0000-0000-000000000000",  # temporal si no hay login
-                "room_id": "00000000-0000-0000-0000-000000000000",  # sala global
+                "user_id": user_id,
+                "room_id": room_id,
                 "text": encrypted,
                 "shift": shift
             }).execute()
 
-            # Enviar a todos
+            # Mensaje formateado
+            full_message = f"{name}: {encrypted}"
+
+            # Enviar a todos los conectados
             for client in clients:
                 await client.send_text(full_message)
 
